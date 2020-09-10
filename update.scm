@@ -1,8 +1,13 @@
-(import (srfi 69) (only (srfi 1) append-map))
+(import (only (srfi 1) append-map remove take))
+(import (only (srfi 13) string-every))
+(import (srfi 69))
 (import (chicken io) (chicken sort))
+(import (http-client) (uri-common))
 (import (html-parser) (sxml-transforms) (sxpath) (sxpath-lolevel))
 
 (define (displayln x) (display x) (newline))
+
+(define (string-blank? s) (string-every char-whitespace? s))
 
 (define-record-type <egg-version>
   (make-egg-version number)
@@ -20,6 +25,18 @@
   (description egg-description)
   (license egg-license)
   (versions-by-number egg-versions-by-number))
+
+(define base-uri "https://code.call-cc.org/cgi-bin/henrietta.cgi")
+
+(define (fetch-egg-version-numbers egg-name chicken-release)
+  (let ((uri (parameterize ((form-urlencoded-separator "&"))
+               (update-uri
+                (absolute-uri base-uri)
+                query: `(("name" . ,egg-name)
+                         ("release" . ,(number->string chicken-release))
+                         ("mode" . "default")
+                         ("listversions" . "1"))))))
+    (remove string-blank? (with-input-from-request uri #f read-lines))))
 
 (define all-tr-tags (sxpath '(// tr)))
 (define all-td-tags (sxpath '(// td)))
@@ -75,8 +92,9 @@
     (for-each (lambda (tr) (scrape-egg-from-tr-tag! chicken-release tr))
               (all-tr-tags sxml))))
 
-(scrape! 4 "index4.html")
-(scrape! 5 "index5.html")
+(define (scrape-all-versions-of-egg! egg chicken-release)
+  (for-each (lambda (number) (get-or-make-version egg number))
+            (fetch-egg-version-numbers (egg-name egg) chicken-release)))
 
 (define (eggs)
   (let ((names (sort (hash-table-keys eggs-by-name) string-ci<?)))
@@ -89,6 +107,14 @@
     (map (lambda (number)
            (hash-table-ref (egg-versions-by-number egg) number))
          numbers)))
+
+(scrape! 4 "index4.html")
+(scrape! 5 "index5.html")
+
+(for-each (lambda (egg)
+            (scrape-all-versions-of-egg! egg 4)
+            (scrape-all-versions-of-egg! egg 5))
+          (take (eggs) 10))
 
 (define (maybe-link link-text url)
   (if (and url (not (eq? url (void))))
