@@ -5,21 +5,21 @@
 (define (displayln x) (display x) (newline))
 
 (define-record-type <egg-version>
-  (make-egg-version number c5-doc-url c5-git-url c4-doc-url c4-git-url)
+  (make-egg-version number)
   egg-version?
   (number egg-version-number)
-  (c5-doc-url egg-version-c5-doc-url)
-  (c5-git-url egg-version-c5-git-url)
-  (c4-doc-url egg-version-c4-doc-url)
-  (c4-git-url egg-version-c4-git-url))
+  (c5-doc-url egg-version-c5-doc-url set-egg-version-c5-doc-url!)
+  (c5-git-url egg-version-c5-git-url set-egg-version-c5-git-url!)
+  (c4-doc-url egg-version-c4-doc-url set-egg-version-c4-doc-url!)
+  (c4-git-url egg-version-c4-git-url set-egg-version-c4-git-url!))
 
 (define-record-type <egg>
-  (make-egg name description license versions)
+  (make-egg name description license versions-by-number)
   egg?
   (name egg-name)
   (description egg-description)
   (license egg-license)
-  (versions egg-versions set-egg-versions!))
+  (versions-by-number egg-versions-by-number))
 
 (define all-tr-tags (sxpath '(// tr)))
 (define all-td-tags (sxpath '(// td)))
@@ -35,9 +35,18 @@
 
 (define (get-or-make-egg name description license)
   (let ((egg (hash-table-ref/default eggs-by-name name #f)))
-    (or egg (let ((egg (make-egg name description license '())))
+    (or egg (let ((egg (make-egg name description license (make-hash-table))))
               (hash-table-set! eggs-by-name name egg)
               egg))))
+
+(define (get-or-make-version egg number)
+  (let ((version (hash-table-ref/default (egg-versions-by-number egg)
+                                         number #f)))
+    (or version (let ((version (make-egg-version number)))
+                  (hash-table-set! (egg-versions-by-number egg)
+                                   number
+                                   version)
+                  version))))
 
 (define (scrape-egg-from-tr-tag! chicken-major tr)
   (let ((tds (all-td-tags tr)))
@@ -48,18 +57,17 @@
                 (descrip (content-string (list-ref tds 1)))
                 (license (content-string (list-ref tds 2)))
                 (number (content-string (list-ref tds 5)))
-                (version (make-egg-version
-                          number
-                          (if (= chicken-major 5) doc-url #f)
-                          #f
-                          (if (= chicken-major 4) doc-url #f)
-                          #f))
-                (egg (get-or-make-egg name descrip license)))
-           (set-egg-versions!
-            egg (sort (cons version (egg-versions egg))
-                      (lambda (a b)
-                        (string-ci>? (egg-version-number a)
-                                     (egg-version-number b)))))
+                (egg (get-or-make-egg name descrip license))
+                (version (get-or-make-version egg number)))
+           (case chicken-major
+             ((5)
+              (set-egg-version-c5-doc-url! version doc-url)
+              ;; (set-egg-version-c5-git-url! version ...)
+              )
+             ((4)
+              (set-egg-version-c4-doc-url! version doc-url)
+              ;; (set-egg-version-c4-git-url! version ...)
+              ))
            egg))))
 
 (define (scrape! chicken-major html-filename)
@@ -75,8 +83,17 @@
     (map (lambda (name) (hash-table-ref eggs-by-name name))
          names)))
 
+(define (egg-versions egg)
+  (let ((numbers (sort (hash-table-keys (egg-versions-by-number egg))
+                       string-ci>?)))
+    (map (lambda (number)
+           (hash-table-ref (egg-versions-by-number egg) number))
+         numbers)))
+
 (define (maybe-link link-text url)
-  (if (not url) '() `((a (@ (href ,url)) ,link-text))))
+  (if (and url (not (eq? url (void))))
+      `((a (@ (href ,url)) ,link-text))
+      '()))
 
 (define (egg-and-version->tr egg version first-version?)
   `(tr ,@(if first-version?
