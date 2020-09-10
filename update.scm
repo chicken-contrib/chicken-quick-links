@@ -48,7 +48,7 @@
                                    version)
                   version))))
 
-(define (scrape-egg-from-tr-tag! chicken-major tr)
+(define (scrape-egg-from-tr-tag! chicken-release tr)
   (let ((tds (all-td-tags tr)))
     (and (= 6 (length tds))
          (let* ((a-tag (car (all-a-tags (car tds))))
@@ -59,7 +59,7 @@
                 (number (content-string (list-ref tds 5)))
                 (egg (get-or-make-egg name descrip license))
                 (version (get-or-make-version egg number)))
-           (case chicken-major
+           (case chicken-release
              ((5)
               (set-egg-version-c5-doc-url! version doc-url)
               ;; (set-egg-version-c5-git-url! version ...)
@@ -70,9 +70,9 @@
               ))
            egg))))
 
-(define (scrape! chicken-major html-filename)
+(define (scrape! chicken-release html-filename)
   (let ((sxml (with-input-from-file html-filename html->sxml)))
-    (for-each (lambda (tr) (scrape-egg-from-tr-tag! chicken-major tr))
+    (for-each (lambda (tr) (scrape-egg-from-tr-tag! chicken-release tr))
               (all-tr-tags sxml))))
 
 (scrape! 4 "index4.html")
