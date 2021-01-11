@@ -29,7 +29,7 @@
   (uri->string
    (update-uri
     (absolute-uri wiki-uri)
-    path: `("eggref" ,(number->string chicken-release) ,egg-name))))
+    path: `(/ "eggref" ,(number->string chicken-release) ,egg-name))))
 
 (define (fetch-egg-version-numbers chicken-release egg-name)
   (let ((uri (parameterize ((form-urlencoded-separator "&"))
