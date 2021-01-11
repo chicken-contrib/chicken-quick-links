@@ -125,7 +125,8 @@
         (head
          (title "Chicken eggs")
          (style
-             "td, th, table { border: 1px solid black; }
+             "html { font-family: sans-serif; }
+              td, th, table { border: 1px solid black; }
               td, th { vertical-align: top; }
               .new { background-color: lightgreen; }
               .old { background-color: pink; }"))
