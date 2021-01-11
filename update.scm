@@ -9,29 +9,32 @@
 
 (define (string-blank? s) (string-every char-whitespace? s))
 
-(define-record-type <egg-version>
-  (make-egg-version number)
-  egg-version?
-  (number egg-version-number)
-  (c5-doc-url egg-version-c5-doc-url set-egg-version-c5-doc-url!)
-  (c5-git-url egg-version-c5-git-url set-egg-version-c5-git-url!)
-  (c4-doc-url egg-version-c4-doc-url set-egg-version-c4-doc-url!)
-  (c4-git-url egg-version-c4-git-url set-egg-version-c4-git-url!))
+(define wiki-uri      "https://wiki.call-cc.org/")
+(define gitweb-uri    "https://code.call-cc.org/cgi-bin/gitweb.cgi")
+(define henrietta-uri "https://code.call-cc.org/cgi-bin/henrietta.cgi")
 
-(define-record-type <egg>
-  (make-egg name description license versions-by-number)
-  egg?
-  (name egg-name)
-  (description egg-description)
-  (license egg-license)
-  (versions-by-number egg-versions-by-number))
+(define (gitweb-repo-uri chicken-release egg-name egg-version)
+  (parameterize ((form-urlencoded-separator "&"))
+    (uri->string
+     (update-uri
+      (absolute-uri gitweb-uri)
+      query: `(("p" . ,(string-append
+                        "eggs-"
+                        (number->string chicken-release)
+                        "-latest.git"))
+               ("a" . "tree")
+               ("f" . ,(string-append egg-name "/" egg-version)))))))
 
-(define base-uri "https://code.call-cc.org/cgi-bin/henrietta.cgi")
+(define (egg-wiki-uri chicken-release egg-name)
+  (uri->string
+   (update-uri
+    (absolute-uri wiki-uri)
+    path: `("eggref" ,(number->string chicken-release) ,egg-name))))
 
-(define (fetch-egg-version-numbers egg-name chicken-release)
+(define (fetch-egg-version-numbers chicken-release egg-name)
   (let ((uri (parameterize ((form-urlencoded-separator "&"))
                (update-uri
-                (absolute-uri base-uri)
+                (absolute-uri henrietta-uri)
                 query: `(("name" . ,egg-name)
                          ("release" . ,(number->string chicken-release))
                          ("mode" . "default")
@@ -48,22 +51,22 @@
 (define (href-attribute node)
   (sxml:attr-from-list (sxml:attr-list node) 'href))
 
+(define-record-type <egg>
+  (make-egg name description license version-c4 version-c5)
+  egg?
+  (name        egg-name)
+  (description egg-description)
+  (license     egg-license)
+  (version-c4  egg-version-c4 set-egg-version-c4!)
+  (version-c5  egg-version-c5 set-egg-version-c5!))
+
 (define eggs-by-name (make-hash-table))
 
 (define (get-or-make-egg name description license)
-  (let ((egg (hash-table-ref/default eggs-by-name name #f)))
-    (or egg (let ((egg (make-egg name description license (make-hash-table))))
-              (hash-table-set! eggs-by-name name egg)
-              egg))))
-
-(define (get-or-make-version egg number)
-  (let ((version (hash-table-ref/default (egg-versions-by-number egg)
-                                         number #f)))
-    (or version (let ((version (make-egg-version number)))
-                  (hash-table-set! (egg-versions-by-number egg)
-                                   number
-                                   version)
-                  version))))
+  (or (hash-table-ref/default eggs-by-name name #f)
+      (let ((egg (make-egg name description license #f #f)))
+        (hash-table-set! eggs-by-name name egg)
+        egg)))
 
 (define (scrape-egg-from-tr-tag! chicken-release tr)
   (let ((tds (all-td-tags tr)))
@@ -73,18 +76,11 @@
                 (doc-url (href-attribute a-tag))
                 (descrip (content-string (list-ref tds 1)))
                 (license (content-string (list-ref tds 2)))
-                (number (content-string (list-ref tds 5)))
-                (egg (get-or-make-egg name descrip license))
-                (version (get-or-make-version egg number)))
+                (version (content-string (list-ref tds 5)))
+                (egg (get-or-make-egg name descrip license)))
            (case chicken-release
-             ((5)
-              (set-egg-version-c5-doc-url! version doc-url)
-              ;; (set-egg-version-c5-git-url! version ...)
-              )
-             ((4)
-              (set-egg-version-c4-doc-url! version doc-url)
-              ;; (set-egg-version-c4-git-url! version ...)
-              ))
+             ((4) (set-egg-version-c4! egg version))
+             ((5) (set-egg-version-c5! egg version)))
            egg))))
 
 (define (scrape! chicken-release html-filename)
@@ -92,48 +88,34 @@
     (for-each (lambda (tr) (scrape-egg-from-tr-tag! chicken-release tr))
               (all-tr-tags sxml))))
 
-(define (scrape-all-versions-of-egg! egg chicken-release)
-  (for-each (lambda (number) (get-or-make-version egg number))
-            (fetch-egg-version-numbers (egg-name egg) chicken-release)))
-
 (define (eggs)
   (let ((names (sort (hash-table-keys eggs-by-name) string-ci<?)))
     (map (lambda (name) (hash-table-ref eggs-by-name name))
          names)))
 
-(define (egg-versions egg)
-  (let ((numbers (sort (hash-table-keys (egg-versions-by-number egg))
-                       string-ci>?)))
-    (map (lambda (number)
-           (hash-table-ref (egg-versions-by-number egg) number))
-         numbers)))
-
 (scrape! 4 "index4.html")
 (scrape! 5 "index5.html")
 
-(for-each (lambda (egg)
-            (scrape-all-versions-of-egg! egg 4)
-            (scrape-all-versions-of-egg! egg 5))
-          (take (eggs) 10))
+(define (chicken-and-egg->td chicken-release egg egg-version newest)
+  (if egg-version
+      `(td (@ (class ,(if (equal? egg-version newest) "new" "old")))
+           (a (@ (href ,(egg-wiki-uri chicken-release (egg-name egg))))
+              "Doc")
+           " "
+           (a (@ (href ,(gitweb-repo-uri chicken-release
+                                         (egg-name egg)
+                                         egg-version)))
+              ,egg-version))
+      '(td (@ (class "old")))))
 
-(define (maybe-link link-text url)
-  (if (and url (not (eq? url (void))))
-      `((a (@ (href ,url)) ,link-text))
-      '()))
-
-(define (egg-and-version->tr egg version first-version?)
-  `(tr ,@(if first-version?
-             `((td ,(egg-name egg))
-               (td ,(egg-description egg))
-               (td ,(egg-license egg)))
-             `((td)
-               (td)
-               (td)))
-       (td ,(egg-version-number version))
-       (td ,@(maybe-link "Doc" (egg-version-c5-doc-url version)))
-       (td "")
-       (td ,@(maybe-link "Doc" (egg-version-c4-doc-url version)))
-       (td "")))
+(define (egg->tr egg)
+  (let ((newest (or (egg-version-c5 egg)
+                    (egg-version-c4 egg))))
+    `(tr (td ,(egg-name egg))
+         (td ,(egg-description egg))
+         (td ,(egg-license egg))
+         ,(chicken-and-egg->td 5 egg (egg-version-c5 egg) newest)
+         ,(chicken-and-egg->td 4 egg (egg-version-c4 egg) newest))))
 
 (with-output-to-file "chicken-eggs.html"
   (lambda ()
@@ -144,23 +126,15 @@
          (title "Chicken eggs")
          (style
              "td, th, table { border: 1px solid black; }
-              td, th { vertical-align: top; }"))
+              td, th { vertical-align: top; }
+              .new { background-color: lightgreen; }
+              .old { background-color: pink; }"))
         (body
          (h1 "Chicken eggs")
          (table
           (tr (th "Egg")
               (th "Description")
               (th "License")
-              (th "Version")
               (th "C5")
-              (th "C5")
-              (th "C4")
               (th "C4"))
-          ,@(append-map
-             (lambda (egg)
-               (cons (let ((version (car (egg-versions egg))))
-                       (egg-and-version->tr egg version #t))
-                     (map (lambda (version)
-                            (egg-and-version->tr egg version #f))
-                          (cdr (egg-versions egg)))))
-             (eggs)))))))))
+          ,@(map egg->tr (eggs)))))))))
