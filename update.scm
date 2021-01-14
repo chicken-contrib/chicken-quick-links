@@ -13,6 +13,13 @@
 (define gitweb-uri    "https://code.call-cc.org/cgi-bin/gitweb.cgi")
 (define henrietta-uri "https://code.call-cc.org/cgi-bin/henrietta.cgi")
 
+(define chicken-4-core
+  '("srfi-1"
+    "srfi-13"
+    "srfi-14"
+    "srfi-18"
+    "srfi-69"))
+
 (define (gitweb-repo-uri chicken-release egg-name egg-version)
   (parameterize ((form-urlencoded-separator "&"))
     (uri->string
@@ -106,6 +113,9 @@
                                             (egg-name egg)
                                             egg-version)))
                  ,egg-version)))
+        ((member (egg-name egg) chicken-4-core)
+         `(td (@ (class "new"))
+              "Core"))
         (else
          '(td (@ (class "old"))))))
 
