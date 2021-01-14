@@ -97,16 +97,17 @@
 (scrape! 5 "index5.html")
 
 (define (chicken-and-egg->td chicken-release egg egg-version newest)
-  (if egg-version
-      `(td (@ (class ,(if (equal? egg-version newest) "new" "old")))
-           (a (@ (href ,(egg-wiki-uri chicken-release (egg-name egg))))
-              "Doc")
-           " "
-           (a (@ (href ,(gitweb-repo-uri chicken-release
-                                         (egg-name egg)
-                                         egg-version)))
-              ,egg-version))
-      '(td (@ (class "old")))))
+  (cond (egg-version
+         `(td (@ (class ,(if (equal? egg-version newest) "new" "old")))
+              (a (@ (href ,(egg-wiki-uri chicken-release (egg-name egg))))
+                 "Doc")
+              " "
+              (a (@ (href ,(gitweb-repo-uri chicken-release
+                                            (egg-name egg)
+                                            egg-version)))
+                 ,egg-version)))
+        (else
+         '(td (@ (class "old"))))))
 
 (define (egg->tr egg)
   (let ((newest (or (egg-version-c5 egg)
