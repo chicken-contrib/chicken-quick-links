@@ -128,25 +128,27 @@
          ,(chicken-and-egg->td 5 egg (egg-version-c5 egg) newest)
          ,(chicken-and-egg->td 4 egg (egg-version-c4 egg) newest))))
 
-(with-output-to-file "chicken-eggs.html"
-  (lambda ()
-    (displayln
-     (SXML->HTML
-      `(html
-        (head
-         (title "Chicken eggs")
-         (style
-             "html { font-family: sans-serif; }
+(define (main)
+  (with-output-to-file "chicken-eggs.html"
+    (lambda ()
+      (SXML->HTML
+       `(html
+         (head
+          (title "Chicken eggs")
+          (style
+              "html { font-family: sans-serif; }
               td, th, table { border: 1px solid black; }
               td, th { vertical-align: top; }
               .new { background-color: lightgreen; }
               .old { background-color: pink; }"))
-        (body
-         (h1 "Chicken eggs")
-         (table
-          (tr (th "Egg")
-              (th "Description")
-              (th "License")
-              (th "C5")
-              (th "C4"))
-          ,@(map egg->tr (eggs)))))))))
+         (body
+          (h1 "Chicken eggs")
+          (table
+           (tr (th "Egg")
+               (th "Description")
+               (th "License")
+               (th "C5")
+               (th "C4"))
+           ,@(map egg->tr (eggs)))))))))
+
+(main)
